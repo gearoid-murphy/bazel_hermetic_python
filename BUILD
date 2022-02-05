@@ -1,5 +1,6 @@
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
-
+load("@bazel_tools//tools/python:toolchain.bzl", "py_runtime_pair")
+load(":adaptors.bzl", "get_executable", "get_runfiles")
 
 configure_make(
     name = "zlib",
@@ -35,7 +36,7 @@ configure_make(
 )
 
 configure_make(
-    name = "python_interpreter",
+    name = "python3_interpreter",
     args = ["-j 12"],
     configure_options = [
       # https://github.com/bazelbuild/rules_foreign_cc/issues/239
@@ -44,6 +45,36 @@ configure_make(
     deps = [":zlib", ":readline", ":ncurses"],
     out_static_libs = ["libpython3.8.a"],
     out_binaries = ["python3.8"],
-    lib_source = "@python_interpreter//:all",
+    lib_source = "@python3_interpreter//:all",
 )
 
+get_executable(
+    name = "python3_interpreter_executable",
+    target = ":python3_interpreter",
+)
+
+py_runtime(
+    name = "hermetic_python3_runtime",
+    files = ["//:python3_interpreter"],
+    interpreter = ":python3_interpreter_executable",
+    python_version = "PY3",
+    visibility = ["//visibility:public"],
+)
+
+py_runtime_pair(
+    name = "hermetic_py_runtime_pair",
+    py2_runtime = None,
+    py3_runtime = ":hermetic_python3_runtime",
+)
+
+toolchain(
+    name = "hermetic_py_toolchain",
+    toolchain = ":hermetic_py_runtime_pair",
+    toolchain_type = "@bazel_tools//tools/python:toolchain_type",
+)
+
+
+py_binary(
+    name = "pyrun",
+    srcs = ["pyrun.py"],
+)

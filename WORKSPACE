@@ -17,12 +17,12 @@ rules_foreign_cc_dependencies(register_default_tools = True)
 
 all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
 
-ZLIB_VERSION="zlib-1.2.11"
+ZLIB_VERSION="zlib-1.2.10"
 http_archive(
     name = "zlib",
     build_file_content = all_content,
     strip_prefix = ZLIB_VERSION,
-    urls = ["https://zlib.net/{0}.tar.gz".format(ZLIB_VERSION)],
+    urls = ["https://zlib.net/fossils/{0}.tar.gz".format(ZLIB_VERSION)],
 )
 
 READLINE_VERSION="readline-8.1"
@@ -44,10 +44,12 @@ http_archive(
 
 PYTHON_VERSION="3.8.3"
 http_archive(
-    name = "python_interpreter",
+    name = "python3_interpreter",
     urls = ["https://www.python.org/ftp/python/{0}/Python-{0}.tar.xz".format(PYTHON_VERSION)],
     sha256 = "dfab5ec723c218082fe3d5d7ae17ecbdebffa9a1aea4d64aa3a2ecdd2e795864",
     strip_prefix = "Python-{0}".format(PYTHON_VERSION),
     build_file_content = all_content,
 )
+
+register_toolchains("//:hermetic_py_toolchain")
 
