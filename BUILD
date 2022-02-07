@@ -1,6 +1,7 @@
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 load("@bazel_tools//tools/python:toolchain.bzl", "py_runtime_pair")
-load(":adaptors.bzl", "get_executable", "get_runfiles")
+package(default_visibility = ["//visibility:public"])
+
 
 configure_make(
     name = "zlib",
@@ -36,43 +37,98 @@ configure_make(
 )
 
 configure_make(
-    name = "python3_interpreter",
+    name = "openssl",
     args = ["-j 12"],
+    configure_command = "config",
+    configure_in_place = True,
     configure_options = [
-      # https://github.com/bazelbuild/rules_foreign_cc/issues/239
-      "CFLAGS='-Dredacted=\"redacted\"'"
+        "no-comp",
+        "no-idea",
+        "no-weak-ssl-ciphers",
+        "no-shared",
     ],
-    deps = [":zlib", ":readline", ":ncurses"],
-    out_static_libs = ["libpython3.8.a"],
-    out_binaries = ["python3.8"],
-    lib_source = "@python3_interpreter//:all",
+    env = select({
+        "@platforms//os:macos": {
+            "AR": "",
+            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+        },
+        "//conditions:default": {
+            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+        },
+    }),
+    lib_source = "@openssl//:all",
+    # Note that for Linux builds, libssl must come before libcrypto on the linker command-line.
+    # As such, libssl must be listed before libcrypto
+    out_static_libs = [
+        "libssl.a",
+        "libcrypto.a",
+    ],
+    targets = [
+        "build_libs",
+        "install_dev",
+    ],
+    toolchains = ["@rules_perl//:current_toolchain"],
 )
 
-get_executable(
-    name = "python3_interpreter_executable",
-    target = ":python3_interpreter",
+configure_make(
+    name = "python3",
+    args = ["-j 12"],
+    configure_options = [
+        "CFLAGS='-Dredacted=\"redacted\"'",
+        "--with-readline=$EXT_BUILD_DEPS/readline",
+        "--with-openssl=$EXT_BUILD_DEPS/openssl",
+        "--with-zlib=$EXT_BUILD_DEPS/zlib",
+        "--with-ncurses=$EXT_BUILD_DEPS/ncurses",
+        "--enable-optimizations",
+    ],
+    env = select({
+        "@platforms//os:macos": {"AR": ""},
+        "//conditions:default": {},
+    }),
+    features = select({
+        "@platforms//os:macos": ["-headerpad"],
+        "//conditions:default": {},
+    }),
+    # rules_foreign_cc defaults the install_prefix to "python".
+    # This conflicts with the "python" executable that is generated.
+    install_prefix = "py_install",
+    lib_source = "@python3_interpreter//:all",
+    out_binaries = [
+        "python3.8",
+    ],
+    out_data_dirs = ["lib"],
+    deps = [
+        ":openssl",
+        ":readline",
+        ":ncurses",
+        ":zlib",
+    ],
+)
+
+filegroup(
+    name = "python3_bin",
+    srcs = [":python3"],
+    output_group = "python3.8",
 )
 
 py_runtime(
-    name = "hermetic_python3_runtime",
-    files = ["//:python3_interpreter"],
-    interpreter = ":python3_interpreter_executable",
+    name = "py3_runtime",
+    files = [":python3"],
+    interpreter = ":python3_bin",
     python_version = "PY3",
-    visibility = ["//visibility:public"],
 )
 
 py_runtime_pair(
-    name = "hermetic_py_runtime_pair",
+    name = "py_runtime_pair",
     py2_runtime = None,
-    py3_runtime = ":hermetic_python3_runtime",
+    py3_runtime = ":py3_runtime",
 )
 
 toolchain(
     name = "hermetic_py_toolchain",
-    toolchain = ":hermetic_py_runtime_pair",
+    toolchain = ":py_runtime_pair",
     toolchain_type = "@bazel_tools//tools/python:toolchain_type",
 )
-
 
 py_binary(
     name = "pyrun",
